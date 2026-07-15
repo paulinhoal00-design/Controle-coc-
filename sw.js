@@ -1,4 +1,4 @@
-const CACHE_NAME = 'diario-bebe-v1';
+const CACHE_NAME = 'diario-bebe-v2';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -34,6 +34,25 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     event.respondWith(
         caches.match(event.request).then(cachedResponse => {
+            const fetchPromise = fetch(event.request).then(networkResponse => {
+                caches.open(CACHE_NAME).then(cache => {
+                    cache.put(event.request, networkResponse.clone());
+                });
+                return networkResponse;
+            }).catch(() => {
+                console.log("Modo Offline Ativo");
+            });
+            return cachedResponse || fetchPromise;
+        })
+    );
+});
+
+// 4. Listener para Atualização Silenciosa
+self.addEventListener('message', event => {
+    if (event.data && event.data.action === 'skipWaiting') {
+        self.skipWaiting();
+    }
+});
             // Vai buscar à rede a versão mais recente em segundo plano
             const fetchPromise = fetch(event.request).then(networkResponse => {
                 caches.open(CACHE_NAME).then(cache => {
