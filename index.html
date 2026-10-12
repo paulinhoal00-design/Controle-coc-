@@ -1,732 +1,202 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2563eb">
-    <link rel="apple-touch-icon" href="icone.png">
-    
-    <title>Registro de Hábito Intestinal</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-
-    <style>
-        :root {
-            --bg-color: #f4f7f6;
-            --card-bg: #ffffff;
-            --primary: #2563eb;
-            --primary-hover: #1d4ed8;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
-            --border: #e5e7eb;
-            --success: #10b981;
-            --warning: #f59e0b;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-
-        body { background-color: var(--bg-color); color: var(--text-main); padding-bottom: 40px; }
-
-        header {
-            background-color: var(--card-bg);
-            padding: 15px 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;
-        }
-
-        header h1 { font-size: 1.2rem; color: var(--primary); display: flex; align-items: center; gap: 8px;}
-        /* Nuvem de Sincronização */
-        .status-nuvem { font-size: 0.75rem; background: #dbeafe; color: var(--primary); padding: 3px 8px; border-radius: 12px; font-weight: bold; }
-        .status-nuvem.offline { background: #fef2f2; color: #ef4444; }
-
-        .export-controls { display: flex; gap: 10px; align-items: center; }
-        .export-controls input { padding: 6px; border: 1px solid var(--border); border-radius: 6px; }
-
-        .btn-exportar { background-color: var(--success); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-
-        .container { max-width: 800px; margin: 0 auto; padding: 0 15px; }
-
-        /* Dashboard KPIs */
-        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .kpi-card { background: var(--card-bg); padding: 15px; border-radius: 12px; border: 1px solid var(--border); text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-        .kpi-value { font-size: 1.8rem; font-weight: bold; color: var(--primary); }
-        .kpi-label { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-
-        .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; border: 1px solid var(--border); }
-        h2 { font-size: 1.1rem; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-
-        /* Formulário */
-        .form-row { display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; }
-        .form-group { flex: 1; display: flex; flex-direction: column; min-width: 120px; }
-        .form-group label { font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; }
-        .form-group input[type="date"], .form-group input[type="time"], .form-group input[type="number"], .form-group textarea { 
-            padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; 
-        }
-
-        /* Diário Alimentar (Checkbox Grid) */
-        .food-section { margin-top: 10px; }
-        .food-category { margin-bottom: 14px; }
-        .food-category-title { font-size: .76rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 7px; }
-        .food-grid { display: flex; flex-wrap: wrap; gap: 7px; }
-        .food-chip { position: relative; cursor: pointer; }
-        .food-chip input { position: absolute; opacity: 0; pointer-events: none; }
-        .food-chip span { display: inline-flex; align-items: center; min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 18px; background: #fff; font-size: .86rem; transition: .15s ease; user-select: none; }
-        .food-chip input:checked + span { background: #eff6ff; border-color: var(--primary); color: var(--primary); font-weight: 700; box-shadow: 0 0 0 1px var(--primary); }
-        .food-chip input:checked + span::before { content: '✓ '; margin-right: 4px; }
-        .save-feedback { margin-top: 8px; min-height: 20px; text-align: center; font-size: .82rem; font-weight: 700; color: var(--success); }
-
-        /* Seletor Escala Bristol */
-        .bristol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 20px; }
-        .bristol-option { border: 2px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.2s; background: #fafafa; }
-        .bristol-option:hover { border-color: var(--primary); }
-        .bristol-option.selected { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: bold; }
-        .bristol-type { font-size: 1.1rem; font-weight: bold; margin-bottom: 4px; display: block; }
-        .bristol-desc { font-size: 0.75rem; color: var(--text-muted); line-height: 1.2; }
-
-        .photo-upload-wrapper { margin-bottom: 20px; }
-        .photo-upload-wrapper input[type="file"] { display: block; width: 100%; padding: 8px; border: 1px dashed var(--primary); border-radius: 6px; background: #f8fafc; }
-        
-        .btn-salvar { width: 100%; background-color: var(--primary); color: white; border: none; padding: 12px; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s;}
-        .btn-salvar:hover { background-color: var(--primary-hover); }
-        .btn-salvar.modo-edicao { background-color: var(--warning); color: #000; }
-
-        /* Lista de Registros e Gráfico */
-        .chart-container { position: relative; height: 200px; width: 100%; margin-bottom: 15px; }
-
-        .registro-item { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--border); gap: 10px; }
-        .registro-item:last-child { border-bottom: none; }
-        .registro-info strong { display: block; font-size: 1rem; color: var(--primary); }
-        .registro-info span { display: block; font-size: 0.85rem; color: var(--text-muted); margin-top: 3px; }
-        .food-tag { display: inline-block; background: #dbeafe; color: #1e3a8a; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; margin-top: 5px; font-weight: bold; }
-        .registro-info img { margin-top: 8px; max-width: 60px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; }
-        
-        .registro-acoes { display: flex; flex-direction: column; gap: 5px; }
-        .btn-acao { cursor: pointer; font-weight: bold; background: none; border: none; padding: 5px; font-size: 0.85rem;}
-        .btn-edit { color: var(--primary); }
-        .btn-del { color: #ef4444; }
-
-        /* --- MODAL E RELATÓRIO VISUAL --- */
-        #modal-relatorio {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto; padding: 20px;
-        }
-        .modal-content { background: white; max-width: 1100px; margin: 0 auto; padding: 30px; border-radius: 12px; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .btn-fechar { background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .btn-imprimir { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-
-        .report-title { text-align: center; color: var(--primary); margin-bottom: 15px; font-size: 1.5rem; text-transform: uppercase; }
-        .report-info { display: flex; justify-content: space-between; margin-bottom: 15px; font-weight: bold; }
-        .report-info input { border: none; border-bottom: 1px solid var(--text-main); font-size: 1rem; outline: none; width: 350px; font-family: inherit; }
-        
-        .table-container { width: 100%; overflow-x: auto; }
-        .bristol-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 0.8rem; }
-        .bristol-table th, .bristol-table td { border: 1px solid #9ca3af; padding: 6px 2px; }
-        .bristol-table th { background-color: #e0e7ff; color: var(--primary); font-weight: bold; }
-        .bristol-table .col-fixed { background-color: #f3f4f6; font-weight: bold; width: 80px; text-align: left; padding-left: 8px; }
-        
-        .legenda-bristol { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.75rem; margin-bottom: 15px; justify-content: center; color: var(--text-muted); }
-        .legenda-item { background: #f3f4f6; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); }
-
-        /* INJEÇÃO PWA: Estilo do Toast de Atualização Silenciosa */
-        #pwa-toast {
-            visibility: hidden; min-width: 280px; background-color: #1f2937; color: #fff;
-            text-align: center; border-radius: 8px; padding: 16px; position: fixed;
-            z-index: 9999; left: 50%; bottom: 20px; transform: translateX(-50%);
-            box-shadow: 0px 5px 15px rgba(0,0,0,0.2); display: flex; align-items: center;
-            justify-content: space-between; font-size: 0.9rem; gap: 15px;
-        }
-        #pwa-toast.show { visibility: visible; animation: slideUp 0.5s ease-out; }
-        #pwa-toast button { background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        @keyframes slideUp { from { bottom: -50px; opacity: 0; } to { bottom: 20px; opacity: 1; } }
-
-        @media print {
-            body { background: white; }
-            header, .container, #pwa-toast { display: none !important; }
-            #modal-relatorio { display: block !important; position: static; background: none; padding: 0; overflow: visible; }
-            .modal-content { box-shadow: none; padding: 0; max-width: 100%; }
-            .modal-header .btn-fechar, .modal-header .btn-imprimir { display: none !important; }
-            .bristol-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            @page { margin: 1cm; size: A4 landscape; }
-        }
-
-        @media (max-width: 600px) {
-            .bristol-grid { grid-template-columns: repeat(2, 1fr); }
-            header { flex-direction: column; align-items: flex-start; }
-            .report-info { flex-direction: column; gap: 10px; }
-            .report-info input { width: 100%; }
-        }
-    </style>
-</head>
-<body>
-
-    <header>
-        <h1>🍼 Diário do Bebê <span class="status-nuvem" id="indicador-nuvem">☁️ Sincronizando...</span></h1>
-        <div class="export-controls">
-            <input type="month" id="mes-exportacao" title="Selecione o mês">
-            <button class="btn-exportar" onclick="abrirRelatorio()">📄 Gerar Relatório</button>
-        </div>
-    </header>
-
-    <div class="container">
-        
-        <div class="dashboard-grid">
-            <div class="kpi-card">
-                <div class="kpi-value" id="kpi-hoje">0</div>
-                <div class="kpi-label">Evacuações Hoje</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-value" id="kpi-tipo">N/A</div>
-                <div class="kpi-label">Predominante (Semana)</div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2 id="titulo-form">Novo Registro</h2>
-            <form id="form-registro" onsubmit="salvarRegistroFirebase(event)">
-                
-                <input type="hidden" id="edit-id" value="">
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="data">Data</label>
-                        <input type="date" id="data" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="hora">Hora</label>
-                        <input type="time" id="hora" required>
-                    </div>
-                    <div class="form-group" style="flex: 0.5;">
-                        <label for="quantidade">Vezes (Multiplicador)</label>
-                        <input type="number" id="quantidade" min="1" max="10" value="1" required>
-                    </div>
-                </div>
-
-                <div class="form-group" style="margin-bottom: 10px;">
-                    <label>Tipo de Fezes (Escala de Bristol)</label>
-                </div>
-                
-                <div class="bristol-grid" id="bristol-selector"></div>
-                <input type="hidden" id="tipo-selecionado" required>
-
-                <div class="form-group" style="margin-bottom: 20px;">
-                    <label>Diário Alimentar Associado (Opcional)</label>
-                    <div class="food-section">
-                        <div class="food-category"><div class="food-category-title">Leites e líquidos</div><div class="food-grid">
-                            <label class="food-chip"><input type="checkbox" value="Leite Materno" class="food-cb"><span>Leite materno</span></label>
-                            <label class="food-chip"><input type="checkbox" value="Fórmula" class="food-cb"><span>Fórmula</span></label>
-                            <label class="food-chip"><input type="checkbox" value="Água" class="food-cb"><span>Água</span></label>
-                        </div></div>
-                        <div class="food-category"><div class="food-category-title">Frutas</div><div class="food-grid">
-                            <label class="food-chip"><input type="checkbox" value="Banana" class="food-cb"><span>Banana</span></label><label class="food-chip"><input type="checkbox" value="Mamão" class="food-cb"><span>Mamão</span></label><label class="food-chip"><input type="checkbox" value="Maçã" class="food-cb"><span>Maçã</span></label><label class="food-chip"><input type="checkbox" value="Pera" class="food-cb"><span>Pera</span></label><label class="food-chip"><input type="checkbox" value="Manga" class="food-cb"><span>Manga</span></label><label class="food-chip"><input type="checkbox" value="Laranja" class="food-cb"><span>Laranja</span></label><label class="food-chip"><input type="checkbox" value="Melancia" class="food-cb"><span>Melancia</span></label><label class="food-chip"><input type="checkbox" value="Abacate" class="food-cb"><span>Abacate</span></label>
-                        </div></div>
-                        <div class="food-category"><div class="food-category-title">Refeição e legumes</div><div class="food-grid">
-                            <label class="food-chip"><input type="checkbox" value="Arroz" class="food-cb"><span>Arroz</span></label><label class="food-chip"><input type="checkbox" value="Feijão" class="food-cb"><span>Feijão</span></label><label class="food-chip"><input type="checkbox" value="Macarrão" class="food-cb"><span>Macarrão</span></label><label class="food-chip"><input type="checkbox" value="Batata" class="food-cb"><span>Batata</span></label><label class="food-chip"><input type="checkbox" value="Mandioca" class="food-cb"><span>Mandioca</span></label><label class="food-chip"><input type="checkbox" value="Cenoura" class="food-cb"><span>Cenoura</span></label><label class="food-chip"><input type="checkbox" value="Abóbora" class="food-cb"><span>Abóbora</span></label><label class="food-chip"><input type="checkbox" value="Brócolis" class="food-cb"><span>Brócolis</span></label><label class="food-chip"><input type="checkbox" value="Papinha/Sólidos" class="food-cb"><span>Papinha</span></label><label class="food-chip"><input type="checkbox" value="Sopa" class="food-cb"><span>Sopa</span></label>
-                        </div></div>
-                        <div class="food-category"><div class="food-category-title">Proteínas e outros</div><div class="food-grid">
-                            <label class="food-chip"><input type="checkbox" value="Ovo" class="food-cb"><span>Ovo</span></label><label class="food-chip"><input type="checkbox" value="Frango" class="food-cb"><span>Frango</span></label><label class="food-chip"><input type="checkbox" value="Carne" class="food-cb"><span>Carne</span></label><label class="food-chip"><input type="checkbox" value="Peixe" class="food-cb"><span>Peixe</span></label><label class="food-chip"><input type="checkbox" value="Iogurte" class="food-cb"><span>Iogurte</span></label><label class="food-chip"><input type="checkbox" value="Queijo" class="food-cb"><span>Queijo</span></label><label class="food-chip"><input type="checkbox" value="Pão" class="food-cb"><span>Pão</span></label><label class="food-chip"><input type="checkbox" value="Aveia" class="food-cb"><span>Aveia</span></label><label class="food-chip"><input type="checkbox" value="Outros" class="food-cb"><span>Outros</span></label>
-                        </div></div>
-                    </div>
-                </div>
-
-                <div class="form-group photo-upload-wrapper">
-                    <label for="foto" id="label-foto">Anexar Foto da Fralda (Opcional)</label>
-                    <input type="file" id="foto" accept="image/*" capture="environment">
-                </div>
-
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="obs">Observações (Opcional)</label>
-                    <textarea id="obs" rows="2" placeholder="Ex: Chorou muito, cólica..."></textarea>
-                </div>
-
-                <button type="submit" id="btn-submit" class="btn-salvar">Salvar Registro</button>
-                <div id="save-feedback" class="save-feedback" aria-live="polite"></div>
-                <button type="button" id="btn-cancelar" class="btn-salvar" style="display:none; background:#ef4444; margin-top:10px;" onclick="cancelarEdicao()">Cancelar Edição</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Evolução Escala de Bristol (Últimos 7 dias)</h2>
-            <div class="chart-container">
-                <canvas id="bristolChart"></canvas>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>Últimos Registros</h2>
-            <div id="lista-registros"></div>
-        </div>
-    </div>
-
-    <div id="modal-relatorio">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button class="btn-fechar" onclick="fecharRelatorio()">✖ Voltar</button>
-                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
-            </div>
-            <div class="print-area">
-                <h2 class="report-title">Registro de Hábito Intestinal</h2>
-                <div class="report-info">
-                    <div>Mês de Referência: <span id="relatorio-mes-ano" style="color:var(--primary);"></span></div>
-                    <div>Criança: <input type="text" placeholder="Digite o nome da criança aqui..."></div>
-                </div>
-                <div class="legenda-bristol" id="legenda-container"></div>
-                <div class="table-container">
-                    <table class="bristol-table">
-                        <thead id="tabela-cabecalho"></thead>
-                        <tbody id="tabela-corpo"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="pwa-toast">
-        <span>🔄 Nova versão disponível!</span>
-        <button id="btn-update-pwa">Atualizar</button>
-    </div>
-
-    <script>
-        // --- 1. CONFIGURAÇÃO FIREBASE (Ambiente Pessoal) ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyCgEXHYlK1HqxjEW-wBveu-iAZDDxUD1gQ",
-            authDomain: "motores-dexco.firebaseapp.com",
-            projectId: "motores-dexco",
-            storageBucket: "motores-dexco.firebasestorage.app",
-            messagingSenderId: "872411715257",
-            appId: "1:872411715257:web:a79439d778d115b3892d68",
-            measurementId: "G-KCDT58T60Z"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-
-        // Ativar Offline-First
-        db.enablePersistence().catch(err => {
-            console.warn("Offline nativo falhou: ", err);
-        });
-
-        let memoriaRegistros = []; // Cache local em tempo real
-        let chartInstance = null;
-        let ultimaAssinaturaGrafico = "";
-
-        const tiposBristol = [
-            { id: 1, nome: "Tipo 1", desc: "Bolinhas duras" },
-            { id: 2, nome: "Tipo 2", desc: "Salsicha encaroçada" },
-            { id: 3, nome: "Tipo 3", desc: "Salsicha c/ rachaduras" },
-            { id: 4, nome: "Tipo 4", desc: "Salsicha lisa/macia" },
-            { id: 5, nome: "Tipo 5", desc: "Pedaços macios" },
-            { id: 6, nome: "Tipo 6", desc: "Pedaços fofos/pastosos" },
-            { id: 7, nome: "Tipo 7", desc: "Totalmente líquido" }
-        ];
-
-        document.addEventListener('DOMContentLoaded', () => {
-            iniciarPWA();
-            renderizarEscalaBristol();
-            preencherDataHoraAtual();
-            configurarMesAtual();
-            gerarLegendaRelatorio();
-            iniciarEscutaFirebase(); // Liga o motor Cloud
-        });
-
-        // --- 2. ESCUTA EM TEMPO REAL (FIREBASE ONSNAPSHOT) ---
-        function iniciarEscutaFirebase() {
-            db.collection("diario_bebe").onSnapshot(snapshot => {
-                memoriaRegistros = [];
-                snapshot.forEach(doc => {
-                    let data = doc.data();
-                    data.id = doc.id; // Anexa o ID real do Firebase ao objeto
-                    memoriaRegistros.push(data);
-                });
-                
-                // Indicador de Nuvem Online
-                document.getElementById('indicador-nuvem').innerText = "☁️ Online";
-                document.getElementById('indicador-nuvem').classList.remove('offline');
-
-                // Atualizar ecrã com dados da nuvem
-                carregarRegistros();
-                
-            }, error => {
-                console.error("Erro Nuvem: ", error);
-                document.getElementById('indicador-nuvem').innerText = "☁️ Offline";
-                document.getElementById('indicador-nuvem').classList.add('offline');
-            });
-        }
-
-        // --- 3. MOTOR DE GRAVAÇÃO E IMAGENS ---
-        function comprimirImagem(file, callback) {
-            if(!file) return callback(null);
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    // Blindagem Firestore: Forçar largura máxima de 450px para evitar exceder 1MB
-                    let targetWidth = img.width;
-                    let targetHeight = img.height;
-                    if (targetWidth > 360) {
-                        targetHeight = targetHeight * (360 / targetWidth);
-                        targetWidth = 360;
-                    }
-                    canvas.width = targetWidth; canvas.height = targetHeight;
-                    canvas.getContext('2d').drawImage(img, 0, 0, targetWidth, targetHeight);
-                    // Qualidade 0.6 para extrema leveza no Firestore
-                    callback(canvas.toDataURL('image/jpeg', 0.48));
-                }
-                img.src = e.target.result;
-            }
-            reader.readAsDataURL(file);
-        }
-
-        async function salvarRegistroFirebase(e) {
-            e.preventDefault();
-            const tipoId = document.getElementById('tipo-selecionado').value;
-            if (!tipoId) return alert("Selecione um Tipo de Bristol.");
-
-            const btnSubmit = document.getElementById('btn-submit');
-            btnSubmit.disabled = true;
-            btnSubmit.innerText = "Salvando...";
-            const feedback = document.getElementById('save-feedback');
-            feedback.innerText = "";
-
-            const editId = document.getElementById('edit-id').value;
-            const arquivoFoto = document.getElementById('foto').files[0];
-            const alimentosSelecionados = Array.from(document.querySelectorAll('.food-cb:checked')).map(cb => cb.value);
-
-            comprimirImagem(arquivoFoto, async function(fotoBase64) {
-                try {
-                    if (editId) {
-                        // EDIÇÃO NO FIREBASE
-                        let dadosAtualizar = {
-                            data: document.getElementById('data').value,
-                            hora: document.getElementById('hora').value,
-                            tipo: parseInt(tipoId),
-                            obs: document.getElementById('obs').value,
-                            alimentacao: alimentosSelecionados
-                        };
-                        // Só substitui foto se o utilizador enviou uma nova
-                        if (fotoBase64) dadosAtualizar.foto = fotoBase64;
-                        
-                        await db.collection("diario_bebe").doc(editId).update(dadosAtualizar);
-                        alert("Registro atualizado!");
-
-                    } else {
-                        // CRIAÇÃO (Permite Multiplicador) NO FIREBASE Batch
-                        const qtd = parseInt(document.getElementById('quantidade').value) || 1;
-                        let batch = db.batch();
-                        
-                        for(let i=0; i<qtd; i++) {
-                            let novoDocRef = db.collection("diario_bebe").doc(); // Gera ID automático
-                            batch.set(novoDocRef, {
-                                data: document.getElementById('data').value,
-                                hora: document.getElementById('hora').value,
-                                tipo: parseInt(tipoId),
-                                obs: document.getElementById('obs').value,
-                                alimentacao: alimentosSelecionados,
-                                foto: fotoBase64,
-                                timestamp: new Date().getTime() + i
-                            });
-                        }
-                        await batch.commit();
-                        alert(`Registro(s) salvo(s)!`);
-                    }
-
-                    cancelarEdicao(); // Limpa form, o onSnapshot trata do resto
-                    
-                } catch (error) {
-                    feedback.style.color = "#ef4444";
-                     feedback.innerText = "Não foi possível salvar. Tente novamente.";
-                    console.error(error);
-                } finally {
-                    btnSubmit.disabled = false;
-                    btnSubmit.innerText = "Salvar Registro";
-                    setTimeout(() => { feedback.innerText = ""; feedback.style.color = ""; }, 2200);
-                }
-            });
-        }
-
-        async function deletarRegistro(id) {
-            if(confirm("Apagar este registro da nuvem permanentemente?")) {
-                try {
-                    await db.collection("diario_bebe").doc(id).delete();
-                } catch(e) { alert("Erro ao apagar."); }
-            }
-        }
-
-        // --- 4. RENDERIZAÇÃO DA INTERFACE (Agora baseada em memoriaRegistros da Nuvem) ---
-        function carregarRegistros() {
-            const listaDiv = document.getElementById('lista-registros');
-            
-            atualizarDashboardEgrafico(memoriaRegistros);
-            
-            // Ordenar do mais recente para o mais antigo
-            let listaVisual = [...memoriaRegistros].sort((a, b) => new Date(b.data + 'T' + b.hora) - new Date(a.data + 'T' + a.hora));
-
-            if (listaVisual.length === 0) {
-                listaDiv.innerHTML = "<p style='color: #6b7280; text-align: center;'>Nenhum registro encontrado na nuvem.</p>";
-                return;
-            }
-
-            listaDiv.innerHTML = '';
-            listaVisual.slice(0, 15).forEach(reg => {
-                const [ano, mes, dia] = reg.data.split('-');
-                const fotoHtml = reg.foto ? `<img src="${reg.foto}" onclick="abrirFoto('${reg.foto}')" title="Ampliar">` : '';
-                const foodHtml = (reg.alimentacao && reg.alimentacao.length > 0) ? `<span class="food-tag">🍽️ ${reg.alimentacao.join(', ')}</span>` : '';
-
-                listaDiv.innerHTML += `
-                    <div class="registro-item">
-                        <div class="registro-info">
-                            <strong>Tipo ${reg.tipo}</strong>
-                            <span>🗓️ ${dia}/${mes}/${ano} às ⏰ ${reg.hora}</span>
-                            ${foodHtml}
-                            ${reg.obs ? `<span>📝 ${reg.obs}</span>` : ''}
-                            ${fotoHtml}
-                        </div>
-                        <div class="registro-acoes">
-                            <button class="btn-acao btn-edit" onclick="prepararEdicao('${reg.id}')">Editar</button>
-                            <button class="btn-acao btn-del" onclick="deletarRegistro('${reg.id}')">Excluir</button>
-                        </div>
-                    </div>
-                `;
-            });
-        }
-
-        function prepararEdicao(id) {
-            const reg = memoriaRegistros.find(r => r.id === id);
-            if (!reg) return;
-
-            document.getElementById('edit-id').value = reg.id;
-            document.getElementById('data').value = reg.data;
-            document.getElementById('hora').value = reg.hora;
-            document.getElementById('quantidade').value = 1;
-            document.getElementById('quantidade').disabled = true;
-            document.getElementById('obs').value = reg.obs || '';
-            selecionarTipo(reg.tipo);
-
-            document.querySelectorAll('.food-cb').forEach(cb => {
-                cb.checked = reg.alimentacao && reg.alimentacao.includes(cb.value);
-            });
-
-            document.getElementById('titulo-form').innerText = "✏️ Editando na Nuvem";
-            document.getElementById('label-foto').innerText = "Substituir Foto (Vazio para manter atual)";
-            const btnSubmit = document.getElementById('btn-submit');
-            btnSubmit.innerText = "Atualizar Registro";
-            btnSubmit.classList.add('modo-edicao');
-            document.getElementById('btn-cancelar').style.display = 'block';
-
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function cancelarEdicao() {
-            document.getElementById('edit-id').value = '';
-            document.getElementById('titulo-form').innerText = "Novo Registro";
-            document.getElementById('label-foto').innerText = "Anexar Foto da Fralda (Opcional)";
-            document.getElementById('quantidade').value = 1;
-            document.getElementById('quantidade').disabled = false;
-            document.getElementById('obs').value = '';
-            document.getElementById('foto').value = '';
-            document.querySelectorAll('.food-cb').forEach(cb => cb.checked = false);
-            selecionarTipo(null);
-            preencherDataHoraAtual();
-            
-            const btnSubmit = document.getElementById('btn-submit');
-            btnSubmit.innerText = "Salvar Registro";
-            btnSubmit.classList.remove('modo-edicao');
-            document.getElementById('btn-cancelar').style.display = 'none';
-        }
-
-        // --- MÉTODOS DE APOIO UI ---
-        function preencherDataHoraAtual() {
-            const agora = new Date();
-            document.getElementById('data').value = agora.toISOString().split('T')[0];
-            document.getElementById('hora').value = agora.toTimeString().split(' ')[0].substring(0,5);
-        }
-
-        function configurarMesAtual() {
-            const agora = new Date();
-            document.getElementById('mes-exportacao').value = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
-        }
-
-        function renderizarEscalaBristol() {
-            const container = document.getElementById('bristol-selector');
-            tiposBristol.forEach(tipo => {
-                const div = document.createElement('div');
-                div.className = 'bristol-option';
-                div.dataset.id = tipo.id;
-                div.innerHTML = `<span class="bristol-type">${tipo.nome}</span><span class="bristol-desc">${tipo.desc}</span>`;
-                div.onclick = () => selecionarTipo(tipo.id);
-                container.appendChild(div);
-            });
-        }
-
-        function selecionarTipo(id) {
-            document.querySelectorAll('.bristol-option').forEach(el => el.classList.remove('selected'));
-            if(id) {
-                document.querySelector(`.bristol-option[data-id="${id}"]`).classList.add('selected');
-                document.getElementById('tipo-selecionado').value = id;
-            } else {
-                document.getElementById('tipo-selecionado').value = '';
-            }
-        }
-
-        function abrirFoto(base64Str) {
-            const novaAba = window.open();
-            novaAba.document.write(`<img src="${base64Str}" style="max-width:100%; display:block; margin:auto;" />`);
-        }
-
-        // --- DASHBOARD E GRÁFICOS ---
-        function atualizarDashboardEgrafico(registros) {
-            const hoje = new Date();
-            const hojeStr = hoje.toISOString().split('T')[0];
-            document.getElementById('kpi-hoje').innerText = registros.filter(r => r.data === hojeStr).length;
-
-            const seteDiasAtras = new Date();
-            seteDiasAtras.setDate(seteDiasAtras.getDate() - 6);
-            
-            const registrosSemana = registros.filter(r => new Date(r.data) >= seteDiasAtras);
-            
-            if(registrosSemana.length === 0) {
-                document.getElementById('kpi-tipo').innerText = "N/A";
-                if(chartInstance) chartInstance.destroy();
-                return;
-            }
-
-            const contagem = {};
-            let maisFrequente = null, max = 0;
-            registrosSemana.forEach(r => {
-                contagem[r.tipo] = (contagem[r.tipo] || 0) + 1;
-                if(contagem[r.tipo] > max) { max = contagem[r.tipo]; maisFrequente = r.tipo; }
-            });
-            document.getElementById('kpi-tipo').innerText = `Tipo ${maisFrequente}`;
-
-            const dadosGrafico = {};
-            for(let i=6; i>=0; i--) {
-                let d = new Date(); d.setDate(d.getDate() - i);
-                let dataFormatada = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}`;
-                dadosGrafico[dataFormatada] = { soma: 0, count: 0 };
-            }
-
-            registrosSemana.forEach(r => {
-                let [a, m, d] = r.data.split('-');
-                let ch = `${d}/${m}`;
-                if(dadosGrafico[ch]) {
-                    dadosGrafico[ch].soma += r.tipo;
-                    dadosGrafico[ch].count += 1;
-                }
-            });
-
-            const labels = Object.keys(dadosGrafico);
-            const dataPoints = labels.map(l => dadosGrafico[l].count > 0 ? (dadosGrafico[l].soma / dadosGrafico[l].count).toFixed(1) : null);
-
-            const assinatura = labels.join("|") + "::" + dataPoints.join("|");
-            if (assinatura !== ultimaAssinaturaGrafico) {
-                ultimaAssinaturaGrafico = assinatura;
-                renderizarGrafico(labels, dataPoints);
-            }
-        }
-
-        function renderizarGrafico(labels, data) {
-            const ctx = document.getElementById('bristolChart').getContext('2d');
-            if (chartInstance) chartInstance.destroy();
-
-            chartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Média Diária (Escala)',
-                        data: data,
-                        borderColor: '#2563eb',
-                        backgroundColor: 'rgba(37, 99, 235, 0.2)',
-                        borderWidth: 2,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#2563eb',
-                        tension: 0.3,
-                        spanGaps: true
-                    }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 1, max: 7, ticks: { stepSize: 1 } } }, plugins: { legend: { display: false } } }
-            });
-        }
-
-        // --- RELATÓRIO VISUAL ---
-        function gerarLegendaRelatorio() {
-            const container = document.getElementById('legenda-container');
-            tiposBristol.forEach(tipo => { container.innerHTML += `<div class="legenda-item"><strong>${tipo.nome}:</strong> ${tipo.desc}</div>`; });
-        }
-
-        function abrirRelatorio() {
-            const inputMes = document.getElementById('mes-exportacao').value;
-            if(!inputMes) return alert("Selecione um mês.");
-
-            const registrosMes = memoriaRegistros.filter(r => r.data.startsWith(inputMes));
-            const [ano, mes] = inputMes.split('-');
-            const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-            document.getElementById('relatorio-mes-ano').innerText = `${nomesMeses[parseInt(mes)-1]} / ${ano}`;
-
-            let matriz = Array.from({length: 7}, () => Array(31).fill(0));
-            let totaisPorTipo = Array(7).fill(0);
-
-            registrosMes.forEach(reg => {
-                const dia = parseInt(reg.data.split('-')[2], 10);
-                const tipoIdx = reg.tipo - 1; 
-                matriz[tipoIdx][dia - 1]++;
-                totaisPorTipo[tipoIdx]++;
-            });
-
-            let theadHtml = `<tr><th class="col-fixed">TIPO \\ DIA</th>`;
-            for (let d = 1; d <= 31; d++) theadHtml += `<th>${d}</th>`;
-            theadHtml += `<th>TOTAL</th></tr>`;
-            document.getElementById('tabela-cabecalho').innerHTML = theadHtml;
-
-            let tbodyHtml = '';
-            for (let i = 0; i < 7; i++) {
-                tbodyHtml += `<tr><td class="col-fixed">Tipo ${i + 1}</td>`;
-                for (let j = 0; j < 31; j++) {
-                    let valor = matriz[i][j];
-                    let exibicao = valor === 0 ? '' : (valor === 1 ? '✔️' : `<span style="color:var(--primary);font-weight:bold;">${valor}</span>`);
-                    tbodyHtml += `<td>${exibicao}</td>`;
-                }
-                let total = totaisPorTipo[i];
-                tbodyHtml += `<td style="font-weight:bold; color:var(--primary);">${total > 0 ? total : ''}</td></tr>`;
-            }
-
-            document.getElementById('tabela-corpo').innerHTML = tbodyHtml;
-            document.getElementById('modal-relatorio').style.display = 'block';
-        }
-
-        function fecharRelatorio() { document.getElementById('modal-relatorio').style.display = 'none'; }
-
-        // --- PWA SILENCIOSO ---
-        function iniciarPWA() {
-            let pwaWorker;
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('sw.js').then(reg => {
-                    reg.addEventListener('updatefound', () => {
-                        pwaWorker = reg.installing;
-                        pwaWorker.addEventListener('statechange', () => {
-                            if (pwaWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                document.getElementById('pwa-toast').classList.add('show');
-                            }
-                        });
-                    });
-                });
-
-                let refreshing;
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    if (refreshing) return;
-                    window.location.reload();
-                    refreshing = true;
-                });
-
-                document.getElementById('btn-update-pwa').addEventListener('click', () => {
-                    if (pwaWorker) pwaWorker.postMessage({ action: 'skipWaiting' });
-                });
-            }
-        }
-    </script>
-</body>
-</html>
+<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#16191f"><meta name="description" content="Gerencie escalas, turnos e folgas offline neste dispositivo."><link rel="manifest" href="./manifest.json"><link rel="icon" href="./icon-192.png"><title>Minha Escala Local</title><style>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:dark;--bg:#111318;--panel:#1d2129;--panel2:#292e39;--text:#f2f4f8;--muted:#aab2c0;--line:#373d49;--accent:#8cb4ff;--work:#e94f4f;--off:#5cde8a;--extra:#f4bc51;--radius:16px}body.light{color-scheme:light;--bg:#f1f3f7;--panel:#fff;--panel2:#e9edf4;--text:#1b2330;--muted:#5d6879;--line:#d9dfe9;--accent:#3268c5}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.app{max-width:900px;margin:auto;min-height:100vh;padding-bottom:96px}.top{display:flex;align-items:center;gap:12px;padding:18px 16px;background:var(--panel);position:sticky;top:0;z-index:10;border-bottom:1px solid var(--line)}.top h1{font-size:21px;margin:0}.top small{color:var(--muted)}.iconbtn{border:0;background:transparent;color:var(--text);font-size:24px;padding:6px 10px}.grow{flex:1}.content{padding:18px 12px}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px}.toolbar h2{font-size:19px;margin:0}.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}.week,.calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.week{text-align:center;color:var(--muted);margin-bottom:9px;font-size:12px}.day{border:1px solid var(--line);background:var(--panel);border-radius:10px;min-height:67px;padding:6px 2px;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:4px}.day.work,.day.off,.day.extra{color:#141820;border-color:transparent}.day.work{background:var(--work)}.day.off{background:var(--off)}.day.extra{background:var(--extra)}.day.today{outline:2px solid var(--accent);outline-offset:-3px}.day.selected{box-shadow:inset 0 0 0 3px var(--text)}.day.empty{visibility:hidden}.day b{font-size:16px}.day span{font-size:10px;text-align:center;line-height:1.1}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:14px 0;color:var(--muted)}.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}.btn{background:var(--accent);color:#101b2c;border:0;border-radius:10px;padding:11px 15px;font-weight:700}.btn.secondary{background:var(--panel2);color:var(--text)}.btn.danger{background:#bb4040;color:#fff}.actions{display:flex;gap:8px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;margin:12px 0}.field label{font-size:13px;color:var(--muted)}input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:12px;border-radius:10px}input[type=color]{padding:3px;height:42px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.hidden{display:none!important}.sidebar{position:fixed;inset:0;z-index:30;background:#0009}.sideinner{background:var(--panel);height:100%;max-width:310px;padding:25px 18px;overflow:auto}.nav{display:block;width:100%;padding:14px;text-align:left;color:var(--text);background:transparent;border:0;border-bottom:1px solid var(--line)}.modalback{position:fixed;inset:0;background:#000a;z-index:40;display:flex;align-items:center;justify-content:center;padding:12px}.modal{width:min(100%,560px);max-height:90vh;overflow:auto;background:var(--panel);padding:20px;border-radius:18px}.modalhead{display:flex;justify-content:space-between;align-items:center}.modalhead h2{margin:0;font-size:19px}.listitem{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:13px 0}.listitem small{display:block;color:var(--muted)}.yeargrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.mini{padding:9px;background:var(--panel);border-radius:12px;border:1px solid var(--line);cursor:pointer}.mini h3{font-size:13px;margin:0 0 8px}.minidays{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}.miniday{aspect-ratio:1;border-radius:3px;background:var(--panel2);font-size:9px;display:grid;place-items:center}.miniday.work{background:var(--work);color:#111}.miniday.off{background:var(--off);color:#111}.miniday.extra{background:var(--extra);color:#111}.miniday.blank{background:transparent}.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#343c49;color:white;padding:12px 18px;border-radius:12px;z-index:80;max-width:90vw}.banner{position:fixed;bottom:12px;left:12px;right:12px;max-width:650px;margin:auto;background:var(--panel);padding:12px;border:1px solid var(--accent);border-radius:12px;z-index:50;display:flex;align-items:center;gap:10px}.muted{color:var(--muted)}.stat{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}.pill{font-size:11px;border-radius:20px;background:var(--panel2);padding:4px 9px}.sectiontitle{margin:24px 0 12px}.foot{font-size:12px;color:var(--muted);text-align:center;padding:16px}@media(min-width:700px){.content{padding:24px}.day{min-height:95px}.yeargrid{grid-template-columns:repeat(3,1fr)}}
+</style></head><body><div id="app" class="app"></div><div id="sidebar" class="sidebar hidden"><div class="sideinner"><div class="toolbar"><strong>Minha Escala</strong><button class="iconbtn" id="closeNav" aria-label="Fechar menu">×</button></div><button class="nav" data-page="month">📅 Calendário mensal</button><button class="nav" data-page="year">🗓 Calendário anual</button><button class="nav" data-page="scales">🔁 Gerenciar escalas</button><button class="nav" data-page="events">⭐ Folgas e eventos</button><button class="nav" data-page="settings">⚙️ Configurações</button><button class="nav" id="installMenu">↓ Instalação do aplicativo</button></div></div><div id="modalroot"></div><div id="update-toast" class="banner hidden"><span class="grow">Nova versão disponível.</span><button id="updateNow" class="btn">Atualizar</button></div><div id="install-banner" class="banner hidden"><span class="grow">Instalar Minha Escala neste dispositivo?</span><button id="installNow" class="btn">Instalar</button><button id="installDismiss" class="iconbtn">×</button></div><div id="toast" class="toast hidden"></div>
+<p id="pwa-status" class="card muted hidden" role="status" style="max-width:876px;margin:12px auto"></p>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let deferredPrompt = null, waitingWorker = null, installed = false;
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const banner = $('install-banner');
+  const installButton = $('installNow');
+  const menuButton = $('installMenu');
+  const status = $('pwa-status');
+  function message(text) {
+    status.textContent = text;
+    status.classList.remove('hidden');
+  }
+  function updateUI() {
+    if (installed || standalone()) {
+      banner.classList.add('hidden');
+      menuButton.textContent = '✓ Aplicativo instalado';
+      return;
+    }
+    menuButton.textContent = deferredPrompt ? '↓ Instalar aplicativo' : '↓ Instalação do aplicativo';
+    if (deferredPrompt) banner.classList.remove('hidden');
+  }
+  // Instalação independente da abertura do banco local.
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    deferredPrompt = event;
+    installButton.disabled = false;
+    updateUI();
+  });
+  window.addEventListener('appinstalled', () => {
+    installed = true;
+    deferredPrompt = null;
+    updateUI();
+    message('Instalação confirmada pelo navegador. Procure Minha Escala nos aplicativos.');
+  });
+  async function install() {
+    if (installed || standalone()) {
+      message('Minha Escala já está instalada ou aberta como aplicativo.');
+      return;
+    }
+    if (!deferredPrompt) {
+      message('O navegador ainda não liberou a instalação. Abra este endereço diretamente no Chrome, use o aplicativo por alguns instantes e verifique o menu ⋮. Se aparecer “já instalado”, procure Minha Escala em Configurações → Aplicativos.');
+      return;
+    }
+    const prompt = deferredPrompt;
+    deferredPrompt = null;
+    installButton.disabled = true;
+    try {
+      await prompt.prompt();
+      const choice = await prompt.userChoice;
+      if (!installed) message(choice.outcome === 'accepted'
+        ? 'Solicitação aceita. Aguarde a conclusão da instalação pelo navegador.'
+        : 'Instalação cancelada. Você pode tentar novamente pelo menu do navegador.');
+    } catch (error) {
+      console.error('Falha no convite de instalação:', error);
+      message('Não foi possível abrir o convite de instalação. Tente pelo menu ⋮ do Chrome.');
+    } finally {
+      banner.classList.add('hidden');
+      installButton.disabled = false;
+      updateUI();
+    }
+  }
+  installButton.onclick = install;
+  menuButton.onclick = () => { $('sidebar').classList.add('hidden'); install(); };
+  $('installDismiss').onclick = () => banner.classList.add('hidden');
+  matchMedia('(display-mode: standalone)').addEventListener('change', updateUI);
+  updateUI();
+  if (!('serviceWorker' in navigator) || !window.isSecureContext) {
+    message('Para instalar, abra o aplicativo por HTTPS no Chrome.');
+    return;
+  }
+  let hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Não interromper um convite de instalação na primeira ativação.
+    if (hadController && !reloading) { reloading = true; location.reload(); }
+    hadController = true;
+  });
+  $('updateNow').onclick = () => {
+    if (waitingWorker) waitingWorker.postMessage({type:'skipWaiting'});
+  };
+  navigator.serviceWorker.register('./sw.js', {scope:'./', updateViaCache:'none'}).then(reg => {
+    const showUpdate = () => {
+      waitingWorker = reg.waiting;
+      if (waitingWorker && navigator.serviceWorker.controller) {
+        banner.classList.add('hidden');
+        $('update-toast').classList.remove('hidden');
+      }
+    };
+    const watch = worker => {
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed') showUpdate();
+        if (worker.state === 'redundant') message('A atualização do aplicativo não foi concluída. Confira se todos os arquivos do pacote foram publicados e recarregue a página.');
+      });
+    };
+    showUpdate(); watch(reg.installing);
+    reg.addEventListener('updatefound', () => watch(reg.installing));
+  }).catch(error => {
+    console.error('Falha no Service Worker:', error);
+    message('Não foi possível preparar a instalação. Confira a publicação do sw.js e dos ícones e recarregue o site.');
+  });
+})();
+
+</script>
+<script type="module">
+const $=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const localISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const parseDate=s=>new Date(s+'T12:00:00');const today=localISO(new Date());const monthName=(y,m)=>new Date(y,m,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});const dayDiff=(a,b)=>Math.round((Date.UTC(...a.split('-').map((x,i)=>i===1?+x-1:+x))-Date.UTC(...b.split('-').map((x,i)=>i===1?+x-1:+x)))/86400000);const defaults={theme:'dark',workColor:'#e94f4f',offColor:'#5cde8a',extraColor:'#f4bc51'};let data={scales:[],periods:[],exceptions:[],events:[],preferences:[]},prefs={...defaults},page='month',view=new Date(),selected=today;// Banco exclusivo desta versão. Nenhum serviço externo é usado.
+const STORE_NAMES=['scales','periods','exceptions','events','preferences'];
+const DB_NAME='minha-escala-local-v1';
+const channel=typeof BroadcastChannel==='function'?new BroadcastChannel(DB_NAME):null;
+const database=new Promise((resolve,reject)=>{
+ if(!window.indexedDB){reject(Error('Este navegador não disponibiliza o banco local.'));return;}
+ const request=indexedDB.open(DB_NAME,1);
+ request.onupgradeneeded=()=>{for(const name of STORE_NAMES)request.result.createObjectStore(name,{keyPath:'id'});};
+ request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>db.close();resolve(db);};
+ request.onerror=()=>reject(request.error||Error('Não foi possível abrir o banco local.'));
+ request.onblocked=()=>notify('Feche outras abas deste aplicativo e recarregue para abrir o banco local.');
+});
+const path=kind=>kind;
+const record=(kind,id)=>({kind,id});
+let syncState='Abrindo banco local…';
+function showSync(){const el=$('syncStatus');if(el)el.textContent=syncState;}
+async function loadLocal(){
+ const db=await database;
+ const rows=await new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE_NAMES,'readonly'),result={};
+  for(const name of STORE_NAMES){const req=tx.objectStore(name).getAll();req.onsuccess=()=>result[name]=req.result;}
+  tx.oncomplete=()=>resolve(result);tx.onabort=()=>reject(tx.error||Error('Falha ao ler o banco local.'));
+ });
+ data=rows;const {id,...visual}=data.preferences.find(x=>x.id==='visual')||{};prefs={...defaults,...visual};
+ syncState='Salvo neste dispositivo • disponível offline';render();
+}
+async function commitLocal(operations){
+ const db=await database;
+ await new Promise((resolve,reject)=>{
+  const stores=[...new Set(operations.map(op=>op.ref.kind))];
+  if(!stores.length){resolve();return;}
+  const tx=db.transaction(stores,'readwrite');let failure;
+  tx.oncomplete=resolve;tx.onabort=()=>reject(failure||tx.error||Error('Não foi possível salvar. Verifique o espaço disponível.'));
+  try{for(const op of operations){
+   const store=tx.objectStore(op.ref.kind);
+   if(op.type==='delete')store.delete(op.ref.id);
+   else if(op.type==='update'){
+    const req=store.get(op.ref.id);req.onsuccess=()=>{
+     if(!req.result){failure=Error('Registro não encontrado. Reabra a tela.');tx.abort();return;}
+     store.put({...req.result,...op.payload,id:op.ref.id});
+    };
+   }else store.put({...op.payload,id:op.ref.id});
+  }}catch(error){failure=error;tx.abort();}
+ });
+ await loadLocal();channel?.postMessage('changed');
+}
+const setDoc=(ref,payload)=>commitLocal([{type:'set',ref,payload}]);
+const updateDoc=(ref,payload)=>commitLocal([{type:'update',ref,payload}]);
+const deleteDoc=ref=>commitLocal([{type:'delete',ref}]);
+async function addDoc(kind,payload){const id=crypto.randomUUID();await setDoc(record(kind,id),payload);return {id};}
+async function connect(){try{await loadLocal();}catch(error){syncState='Banco local indisponível';showSync();notify(error.message);}}
+channel?.addEventListener('message',()=>connect());
+window.addEventListener('focus',()=>connect());
+function notify(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(notify.t);notify.t=setTimeout(()=>$('toast').classList.add('hidden'),3500)}function applyTheme(){const dark=prefs.theme==='dark'||(prefs.theme==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches);document.body.classList.toggle('light',!dark);document.documentElement.style.setProperty('--work',prefs.workColor);document.documentElement.style.setProperty('--off',prefs.offColor);document.documentElement.style.setProperty('--extra',prefs.extraColor)}matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(prefs.theme==='auto')applyTheme()});function status(date){let p=data.periods.filter(x=>x.start<=date&&(!x.end||x.end>=date)).sort((a,b)=>b.start.localeCompare(a.start))[0];let scale=p&&data.scales.find(s=>s.id===p.scaleId);let base=null;if(p&&scale){const seq=scale.pattern||'TF';const delta=dayDiff(date,p.anchor||p.start);const i=((delta%seq.length)+seq.length)%seq.length;base=seq[i]==='T'?'work':'off'}let exception=data.exceptions.filter(x=>x.date===date).sort((a,b)=>a.id.localeCompare(b.id))[0];return {type:exception?(exception.type==='work'?'work':'extra'):base,period:p,scale,exception,label:exception?exception.label:(base==='work'?(scale?.workLabel||'Trabalho'):base==='off'?'Folga':'Sem escala')}}function render(){applyTheme();const titles={month:'Calendário',year:'Calendário anual',scales:'Escalas',events:'Folgas e eventos',settings:'Configurações'};$('app').innerHTML=`<header class="top"><button class="iconbtn" id="menuBtn" aria-label="Abrir menu">☰</button><div class="grow"><h1>${titles[page]}</h1><small><span id="syncStatus">${esc(syncState)}</span></small></div><button class="iconbtn" id="themeBtn" title="Alternar tema">◐</button></header><main class="content" id="main"></main><footer class="foot">Minha Escala • Banco local</footer>`;$('menuBtn').onclick=()=>$('sidebar').classList.remove('hidden');$('themeBtn').onclick=async()=>{prefs.theme=prefs.theme==='dark'?'light':prefs.theme==='light'?'auto':'dark';await savePrefs()};if(page==='month')renderMonth();if(page==='year')renderYear();if(page==='scales')renderScales();if(page==='events')renderEvents();if(page==='settings')renderSettings()}
+function dayCell(date,compact=false){const s=status(date),d=parseDate(date);return `<button class="day ${s.type||''} ${date===today?'today':''} ${date===selected?'selected':''}" data-date="${date}" aria-label="${date}: ${esc(s.label)}"><b>${d.getDate()}</b>${!compact&&s.type?`<span>${s.exception?'★':s.type==='work'?'T':'F'}</span>`:''}</button>`}function renderMonth(){const y=view.getFullYear(),m=view.getMonth(),first=new Date(y,m,1).getDay(),total=new Date(y,m+1,0).getDate();let cells=Array(first).fill('<div class="day empty"></div>').join('');for(let d=1;d<=total;d++)cells+=dayCell(localISO(new Date(y,m,d)));const s=status(selected);$('main').innerHTML=`<div class="toolbar"><button class="iconbtn" id="prev">‹</button><h2>${monthName(y,m)}</h2><button class="iconbtn" id="next">›</button></div><div class="week">${['D','S','T','Q','Q','S','S'].map(x=>`<b>${x}</b>`).join('')}</div><div class="calendar">${cells}</div><div class="legend"><span><i class="dot" style="background:var(--work)"></i>Trabalho</span><span><i class="dot" style="background:var(--off)"></i>Folga</span><span><i class="dot" style="background:var(--extra)"></i>Exceção</span></div><div class="card"><div class="toolbar"><strong>${parseDate(selected).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</strong><span class="pill">${esc(s.label)}</span></div><p class="muted">${s.scale?esc(s.scale.name):'Nenhuma escala ativa'}${s.type==='work'&&s.scale?' • '+esc(s.scale.startTime||'')+' às '+esc(s.scale.endTime||''):''}</p><div class="actions"><button class="btn" id="addException">+ Folga / ocorrência</button><button class="btn secondary" id="addEvent">+ Nota</button></div></div><div class="card"><strong>Resumo do mês</strong><div id="stats"></div></div>`;$('prev').onclick=()=>{view=new Date(y,m-1,1);render()};$('next').onclick=()=>{view=new Date(y,m+1,1);render()};document.querySelectorAll('[data-date]').forEach(el=>el.onclick=()=>{selected=el.dataset.date;render()});$('addException').onclick=()=>exceptionModal(null,selected);$('addEvent').onclick=()=>eventModal(null,selected);let counts={work:0,off:0,extra:0};for(let d=1;d<=total;d++){let t=status(localISO(new Date(y,m,d))).type;if(t)counts[t]++}$('stats').innerHTML=`<div class="stat"><span>Trabalho</span><b>${counts.work}</b></div><div class="stat"><span>Folgas regulares</span><b>${counts.off}</b></div><div class="stat"><span>Ocorrências</span><b>${counts.extra}</b></div>`}
+function renderYear(){let y=view.getFullYear();let html='';for(let m=0;m<12;m++){const offset=new Date(y,m,1).getDay(),total=new Date(y,m+1,0).getDate();let cells=Array(offset).fill('<span class="miniday blank"></span>').join('');for(let d=1;d<=total;d++){const s=status(localISO(new Date(y,m,d)));cells+=`<span class="miniday ${s.type||''}">${d}</span>`}html+=`<div class="mini" data-month="${m}"><h3>${new Date(y,m,1).toLocaleDateString('pt-BR',{month:'long'})}</h3><div class="minidays">${cells}</div></div>`}$('main').innerHTML=`<div class="toolbar"><button class="iconbtn" id="prev">‹</button><h2>${y}</h2><button class="iconbtn" id="next">›</button></div><div class="yeargrid">${html}</div><p class="muted">Toque em um mês para abrir o calendário detalhado.</p>`;$('prev').onclick=()=>{view=new Date(y-1,0,1);render()};$('next').onclick=()=>{view=new Date(y+1,0,1);render()};document.querySelectorAll('[data-month]').forEach(el=>el.onclick=()=>{view=new Date(y,+el.dataset.month,1);page='month';render()})}
+function renderScales(){$('main').innerHTML=`<div class="toolbar"><h2>Modelos de escala</h2><button class="btn" id="newScale">+ Criar</button></div><p class="muted">Sequência T = trabalho, F = folga. Ex.: 12x36 = TF; 6x2 = TTTTTTFF.</p><div class="card">${data.scales.length?data.scales.map(s=>`<div class="listitem"><div><strong>${esc(s.name)}</strong><small>${esc(s.description||'')} • ${esc(s.pattern)} • ${esc(s.startTime||'')}–${esc(s.endTime||'')}</small></div><button class="btn secondary" data-scale="${s.id}">Editar</button></div>`).join(''):'Nenhuma escala cadastrada.'}</div><div class="toolbar"><h2>Períodos de aplicação</h2><button class="btn" id="newPeriod">+ Aplicar escala</button></div><p class="muted">Cada período possui data inicial e, opcionalmente, final. O início é a referência do primeiro dia do ciclo.</p><div class="card">${data.periods.length?data.periods.slice().sort((a,b)=>b.start.localeCompare(a.start)).map(p=>`<div class="listitem"><div><strong>${esc(data.scales.find(s=>s.id===p.scaleId)?.name||'Escala excluída')}</strong><small>${esc(p.start)} até ${esc(p.end||'indefinido')} • Referência: ${esc(p.anchor||p.start)}</small></div><button class="btn secondary" data-period="${p.id}">Editar</button></div>`).join(''):'Nenhum período cadastrado.'}</div>`;$('newScale').onclick=()=>scaleModal();$('newPeriod').onclick=()=>periodModal();document.querySelectorAll('[data-scale]').forEach(el=>el.onclick=()=>scaleModal(data.scales.find(s=>s.id===el.dataset.scale)));document.querySelectorAll('[data-period]').forEach(el=>el.onclick=()=>periodModal(data.periods.find(p=>p.id===el.dataset.period)))}
+function renderEvents(){$('main').innerHTML=`<div class="actions"><button class="btn" id="newEx">+ Folga / ocorrência</button><button class="btn secondary" id="newEv">+ Nota</button></div><h2 class="sectiontitle">Folgas e alterações</h2><div class="card">${data.exceptions.length?data.exceptions.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(x=>`<div class="listitem"><div><strong>${esc(x.label||x.type)}</strong><small>${esc(x.date)}</small></div><button class="btn secondary" data-ex="${x.id}">Editar</button></div>`).join(''):'Nenhuma ocorrência.'}</div><h2 class="sectiontitle">Notas e eventos</h2><div class="card">${data.events.length?data.events.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(x=>`<div class="listitem"><div><strong>${esc(x.title)}</strong><small>${esc(x.date)} • ${esc(x.notes||'')}</small></div><button class="btn secondary" data-ev="${x.id}">Editar</button></div>`).join(''):'Nenhuma nota.'}</div>`;$('newEx').onclick=()=>exceptionModal();$('newEv').onclick=()=>eventModal();document.querySelectorAll('[data-ex]').forEach(el=>el.onclick=()=>exceptionModal(data.exceptions.find(x=>x.id===el.dataset.ex)));document.querySelectorAll('[data-ev]').forEach(el=>el.onclick=()=>eventModal(data.events.find(x=>x.id===el.dataset.ev)))}
+function renderSettings(){$('main').innerHTML=`<div class="card"><h2>Aparência</h2><div class="field"><label>Tema</label><select id="prefTheme"><option value="dark">Escuro</option><option value="light">Claro</option><option value="auto">Automático</option></select></div><div class="grid2"><div class="field"><label>Trabalho</label><input id="prefWork" type="color"></div><div class="field"><label>Folga</label><input id="prefOff" type="color"></div><div class="field"><label>Folga extra / ocorrência</label><input id="prefExtra" type="color"></div></div><button class="btn" id="saveSettings">Salvar preferências</button></div><div class="card"><h2>Backup</h2><p class="muted">Exporte seus dados em JSON ou importe um backup. A importação mescla documentos com o mesmo ID.</p><div class="actions"><button class="btn secondary" id="exportBackup">Exportar JSON</button><label class="btn secondary" for="importBackup">Importar JSON</label><input type="file" id="importBackup" accept="application/json,.json" class="hidden"></div></div><div class="card"><h2>Armazenamento local</h2><p class="muted">As informações ficam salvas apenas neste navegador e dispositivo. Exporte um backup antes de limpar os dados do navegador ou trocar de celular.</p></div>`;$('prefTheme').value=prefs.theme;$('prefWork').value=prefs.workColor;$('prefOff').value=prefs.offColor;$('prefExtra').value=prefs.extraColor;$('saveSettings').onclick=async()=>{prefs={theme:$('prefTheme').value,workColor:$('prefWork').value,offColor:$('prefOff').value,extraColor:$('prefExtra').value};await savePrefs()};$('exportBackup').onclick=()=>{const blob=new Blob([JSON.stringify({app:'minha-escala',version:1,exportedAt:new Date().toISOString(),data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`minha-escala-${today}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};$('importBackup').onchange=importBackup}
+async function savePrefs(){try{await setDoc(record('preferences','visual'),prefs);applyTheme();render();notify('Preferências salvas')}catch(e){notify('Erro ao salvar: '+e.message)}}function modal(title,body,onSave,onDelete){$('modalroot').innerHTML=`<div class="modalback"><div class="modal" role="dialog" aria-modal="true"><div class="modalhead"><h2>${esc(title)}</h2><button class="iconbtn" id="modalClose" aria-label="Fechar">×</button></div><form id="modalForm">${body}<div class="actions" style="margin-top:20px"><button class="btn" type="submit">Salvar</button><button class="btn secondary" type="button" id="modalCancel">Cancelar</button>${onDelete?'<button class="btn danger" type="button" id="modalDelete">Excluir</button>':''}</div></form></div></div>`;const close=()=>$('modalroot').innerHTML='';$('modalClose').onclick=close;$('modalCancel').onclick=close;$('modalForm').onsubmit=async e=>{e.preventDefault();try{await onSave();close();notify('Salvo com sucesso')}catch(err){notify(err.message)}};if(onDelete)$('modalDelete').onclick=async()=>{if(confirm('Confirma a exclusão?'))try{await onDelete();close();notify('Excluído')}catch(e){notify(e.message)}}}
+const field=(label,id,value='',type='text',required=true)=>`<div class="field"><label for="${id}">${esc(label)}</label><input id="${id}" type="${type}" value="${esc(value)}" ${required?'required':''}></div>`;function scaleModal(s){modal(s?'Editar escala':'Nova escala',field('Nome','fName',s?.name||'')+field('Descrição','fDesc',s?.description||'', 'text',false)+field('Sequência (T = trabalho, F = folga)','fPattern',s?.pattern||'TF')+`<div class="grid2">${field('Entrada','fStart',s?.startTime||'07:00','time')}${field('Saída','fEnd',s?.endTime||'19:00','time')}</div>`+field('Identificação do turno','fLabel',s?.workLabel||'Trabalho'),async()=>{const pattern=$('fPattern').value.trim().toUpperCase().replace(/\s/g,'');if(!/^[TF]{1,366}$/.test(pattern))throw Error('A sequência deve conter apenas T e F (até 366 dias).');const payload={name:$('fName').value.trim(),description:$('fDesc').value.trim(),pattern,startTime:$('fStart').value,endTime:$('fEnd').value,workLabel:$('fLabel').value.trim()};if(s)await updateDoc(record('scales',s.id),payload);else await addDoc(path('scales'),payload)},s?async()=>{if(data.periods.some(p=>p.scaleId===s.id))throw Error('Remova os períodos vinculados antes de excluir a escala.');await deleteDoc(record('scales',s.id))}:null)}function periodModal(p){if(!data.scales.length)return notify('Crie uma escala primeiro.');const options=data.scales.map(s=>`<option value="${s.id}" ${p?.scaleId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');modal(p?'Editar período':'Aplicar escala',`<div class="field"><label>Escala</label><select id="fScale">${options}</select></div>`+field('Data de início','fFrom',p?.start||today,'date')+field('Data final (opcional)','fTo',p?.end||'','date',false)+field('Data de referência do ciclo','fAnchor',p?.anchor||p?.start||today,'date')+`<p class="muted">Na data de referência, começa o primeiro símbolo da sequência. Para inverter os dias da escala 12x36, ajuste essa referência em um dia.</p>`,async()=>{const payload={scaleId:$('fScale').value,start:$('fFrom').value,end:$('fTo').value,anchor:$('fAnchor').value};if(payload.end&&payload.end<payload.start)throw Error('A data final deve ser posterior à inicial.');const overlap=data.periods.some(x=>x.id!==p?.id&&payload.start<=(x.end||'9999-12-31')&&(payload.end||'9999-12-31')>=x.start);if(overlap)throw Error('Este período se sobrepõe a outro. Encerre o anterior antes de criar o novo.');if(p)await updateDoc(record('periods',p.id),payload);else await addDoc(path('periods'),payload)},p?()=>deleteDoc(record('periods',p.id)):null)}function exceptionModal(x,date=selected){modal(x?'Editar ocorrência':'Nova ocorrência',field('Data','fDate',x?.date||date,'date')+`<div class="field"><label>Tipo</label><select id="fType"><option value="extra">Folga extra / banco de horas / férias</option><option value="work">Trabalho extra / troca de turno</option></select></div>`+field('Descrição','fLabel',x?.label||'Folga extra')+`<p class="muted">Esta alteração afeta somente o dia escolhido, sem deslocar o ciclo da escala.</p>`,async()=>{const payload={date:$('fDate').value,type:$('fType').value,label:$('fLabel').value.trim()};const duplicate=data.exceptions.find(e=>e.date===payload.date&&e.id!==x?.id);if(duplicate)throw Error('Já existe uma ocorrência nesse dia. Edite a ocorrência existente.');if(x)await updateDoc(record('exceptions',x.id),payload);else await addDoc(path('exceptions'),payload)},x?()=>deleteDoc(record('exceptions',x.id)):null);$('fType').value=x?.type||'extra'}function eventModal(x,date=selected){modal(x?'Editar nota':'Nova nota',field('Data','fDate',x?.date||date,'date')+field('Título','fTitle',x?.title||'')+`<div class="field"><label>Observações</label><textarea id="fNotes" rows="4">${esc(x?.notes||'')}</textarea></div>`,async()=>{const payload={date:$('fDate').value,title:$('fTitle').value.trim(),notes:$('fNotes').value.trim()};if(x)await updateDoc(record('events',x.id),payload);else await addDoc(path('events'),payload)},x?()=>deleteDoc(record('events',x.id)):null)}
+async function importBackup(e){
+ const file=e.target.files[0];if(!file)return;
+ try{
+  if(file.size>3e6)throw Error('Arquivo muito grande.');
+  const obj=JSON.parse(await file.text());
+  if(obj.app!=='minha-escala'||obj.version!==1||!obj.data)throw Error('Formato de backup inválido.');
+  const ops=[];
+  for(const kind of STORE_NAMES){
+   if(!Array.isArray(obj.data[kind]))throw Error('Dados inválidos: '+kind);
+   for(const item of obj.data[kind]){
+    if(!item||typeof item.id!=='string'||! /^[A-Za-z0-9_-]{1,200}$/.test(item.id))throw Error('ID inválido no backup.');
+    const {id,...payload}=item;
+    const str=(key,max=10000)=>typeof payload[key]==='string'&&payload[key].length<=max;
+    const date=key=>str(key,10)&&/^\d{4}-\d{2}-\d{2}$/.test(payload[key]);
+    if(kind==='scales'&&!(str('name',200)&&str('pattern',366)&&/^[TF]+$/.test(payload.pattern)))throw Error('Escala inválida no backup.');
+    if(kind==='periods'&&!(str('scaleId',200)&&date('start')&&(!payload.end||date('end'))&&(!payload.anchor||date('anchor'))))throw Error('Período inválido no backup.');
+    if(kind==='exceptions'&&!(date('date')&&str('label')&&['work','extra'].includes(payload.type)))throw Error('Ocorrência inválida no backup.');
+    if(kind==='events'&&!(date('date')&&str('title')&&str('notes')))throw Error('Nota inválida no backup.');
+    if(kind==='preferences'&&!(id==='visual'&&['dark','light','auto'].includes(payload.theme)&&['workColor','offColor','extraColor'].every(k=>str(k,7)&&/^#[a-fA-F0-9]{6}$/.test(payload[k]))))throw Error('Preferências inválidas no backup.');
+    ops.push({type:'set',ref:record(kind,id),payload});
+   }
+  }
+  if(ops.length>2000)throw Error('Backup excede o limite de 2000 registros.');
+  if(!confirm(`Importar ${ops.length} registros neste dispositivo? IDs iguais serão substituídos.`))return;
+  await commitLocal(ops);notify('Backup importado com sucesso');
+ }catch(error){notify('Erro na importação: '+error.message);}
+ e.target.value='';
+}
+render();connect();$('closeNav').onclick=()=>$('sidebar').classList.add('hidden');$('sidebar').onclick=e=>{if(e.target===$('sidebar'))$('sidebar').classList.add('hidden')};document.querySelectorAll('[data-page]').forEach(el=>el.onclick=()=>{page=el.dataset.page;$('sidebar').classList.add('hidden');render()});
+</script></body></html>
